@@ -1,9 +1,11 @@
+from datetime import datetime, timedelta, timezone
 import json
 import os
-import numpy as np
-import streamlit as st
 from google import genai
 from google.genai import types
+import gspread
+import numpy as np
+import streamlit as st
 
 st.set_page_config(page_title="KEC AI 규정 검색기", page_icon="⚡", layout="centered")
 st.title("⚡ KEC(한국전기설비규정) AI 어시스턴트")
@@ -62,7 +64,7 @@ if not api_key:
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# 3. 데이터 및 AI 클라이언트 캐싱
+# 3. 데이터, AI 클라이언트 및 구글 시트 로거 캐싱
 @st.cache_resource
 def load_resources(key: str):
     client = genai.Client(api_key=key)
@@ -70,6 +72,27 @@ def load_resources(key: str):
         chunks = json.load(f)
     vectors = np.load(os.path.join(BASE_DIR, "kec_vectors.npz"))["vectors"]
     return client, chunks, vectors
+
+@st.cache_resource(ttl=3600)
+def get_log_worksheet():
+    if "GCP_SERVICE_ACCOUNT_JSON" not in st.secrets:
+        return None
+    raw_secret = st.secrets["GCP_SERVICE_ACCOUNT_JSON"]
+    creds_dict = json.loads(raw_secret) if isinstance(raw_secret, str) else dict(raw_secret)
+    gc = gspread.service_account_from_dict(creds_dict)
+    return gc.open("KEC_챗봇_사용기록").sheet1
+
+def log_question(question: str, mode_label: str, answer_text: str):
+    try:
+        ws = get_log_worksheet()
+        if ws is None:
+            return
+        kst = timezone(timedelta(hours=9))
+        now_str = datetime.now(kst).strftime("%Y-%m-%d %H:%M:%S")
+        summary = (answer_text or "").replace("\n", " ").strip()[:150]
+        ws.append_row([now_str, mode_label, question, summary], value_input_option="USER_ENTERED")
+    except Exception:
+        pass  # 시트 연결 오류가 발생해도 사용자 답변 출력에는 영향을 주지 않음
 
 @st.cache_data(ttl=3600)
 def get_candidate_models(_client, prefer_lite: bool = True):
@@ -189,35 +212,4 @@ prompt_to_run = selected_sample or user_input
 
 if prompt_to_run:
     if st.session_state.q_count >= 20:
-        st.warning("베타 테스트 기간 중 1회 접속당 최대 20회까지 질문할 수 있습니다. 새로고침 후 다시 이용해 주세요.")
-    else:
-        prefer_lite = "빠른" in answer_mode
-        top_k = 3 if prefer_lite else 5
-
-        st.session_state.messages.append({"role": "user", "content": prompt_to_run})
-        with st.chat_message("user"):
-            st.markdown(prompt_to_run)
-
-        with st.chat_message("assistant"):
-            try:
-                with st.spinner("KEC 관련 조항을 찾는 중..."):
-                    sources, context_text = retrieve_kec_sources(prompt_to_run, top_k=top_k)
-
-                answer = st.write_stream(
-                    stream_kec_answer(prompt_to_run, context_text, prefer_lite=prefer_lite)
-                )
-
-                with st.expander("📖 근거 KEC 원문 조항 보기"):
-                    for s in sources:
-                        st.markdown(f"**{s['title']}**")
-                        st.text(s["content"])
-                        st.divider()
-
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": answer,
-                    "sources": sources,
-                })
-                st.session_state.q_count += 1
-            except Exception as e:
-                st.error(f"일시적인 서버 혼잡이 발생했습니다. 잠시 후 다시 시도해 주세요. ({e})")
+        st.warning("베타 테스트 기간 중
