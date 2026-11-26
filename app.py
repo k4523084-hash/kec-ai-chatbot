@@ -214,3 +214,38 @@ if prompt_to_run:
     if st.session_state.q_count >= 20:
         st.warning("베타 테스트 기간 중 1회 접속당 최대 20회까지 질문할 수 있습니다. 새로고침 후 다시 이용해 주세요.")
     else:
+        prefer_lite = "빠른" in answer_mode
+        top_k = 3 if prefer_lite else 5
+
+        st.session_state.messages.append({"role": "user", "content": prompt_to_run})
+        with st.chat_message("user"):
+            st.markdown(prompt_to_run)
+
+        with st.chat_message("assistant"):
+            try:
+                with st.spinner("KEC 관련 조항을 찾는 중..."):
+                    sources, context_text = retrieve_kec_sources(prompt_to_run, top_k=top_k)
+
+                answer = st.write_stream(
+                    stream_kec_answer(prompt_to_run, context_text, prefer_lite=prefer_lite)
+                )
+
+                with st.expander("📖 근거 KEC 원문 조항 보기"):
+                    for s in sources:
+                        st.markdown(f"**{s['title']}**")
+                        st.text(s["content"])
+                        st.divider()
+
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": answer,
+                    "sources": sources,
+                })
+                st.session_state.q_count += 1
+                log_question(
+                    prompt_to_run,
+                    "빠른 답변" if prefer_lite else "정밀 분석",
+                    answer,
+                )
+            except Exception as e:
+                st.error(f"일시적인 서버 혼잡이 발생했습니다. 잠시 후 다시 시도해 주세요. ({e})")
