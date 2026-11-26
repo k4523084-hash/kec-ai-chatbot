@@ -212,4 +212,5 @@ prompt_to_run = selected_sample or user_input
 
 if prompt_to_run:
     if st.session_state.q_count >= 20:
-st.warning("베타 테스트 기간 중 1회 접속당 최대 20회까지 질문할 수 있습니다. 새로고침 후 다시 이용해 주세요.")
+        st.warning("베타 테스트 기간 중 1회 접속당 최대 20회까지 질문할 수 있습니다. 새로고침 후 다시 이용해 주세요.")
+    else:
