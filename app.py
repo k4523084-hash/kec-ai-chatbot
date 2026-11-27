@@ -8,6 +8,24 @@ import numpy as np
 import streamlit as st
 
 st.set_page_config(page_title="KEC AI 규정 검색기", page_icon="⚡", layout="centered")
+
+st.markdown(
+    """
+    <style>
+    [data-testid="stMainBlockContainer"] {
+        flex-grow: 0 !important;
+        padding-top: 2rem !important;
+        padding-bottom: 1rem !important;
+    }
+    h1 {
+        font-size: clamp(1.4rem, 3vw, 2.1rem) !important;
+        word-break: keep-all;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 st.title("⚡ KEC(한국전기설비규정) AI 어시스턴트")
 st.caption("1,233페이지 분량의 KEC 원문 및 표 데이터를 기반으로 조항과 기준 수치를 찾아드립니다.")
 
@@ -22,7 +40,7 @@ except Exception:
 if not api_key:
     api_key = os.environ.get("GEMINI_API_KEY", "")
 
-# 2. 사이드바 설정 (로컬 테스트 시 키 직접 입력 지원)
+# 2. 사이드바 설정
 with st.sidebar:
     if not api_key:
         st.subheader("🔑 API 키 설정")
@@ -37,7 +55,7 @@ with st.sidebar:
     st.header("⚙️ 답변 모드 설정")
     answer_mode = st.radio(
         "답변 방식을 선택하세요",
-        ["⚡ 빠른 답변 (기본 · Flash-Lite)", "🔍 정밀 분석 (복합 조항 · Flash)"],
+        ["⚡ 빠른 답변 (기본)", "🔍 정밀 분석 (복합 조항)"],
         index=0,
     )
     st.caption("일반 조항·수치 조회는 '빠른 답변'으로 1~2초 만에 출력되며, 여러 단서 조항 비교가 필요할 때 '정밀 분석'을 선택하세요.")
@@ -92,7 +110,7 @@ def log_question(question: str, mode_label: str, answer_text: str):
         summary = (answer_text or "").replace("\n", " ").strip()[:150]
         ws.append_row([now_str, mode_label, question, summary], value_input_option="USER_ENTERED")
     except Exception:
-        pass  # 시트 연결 오류가 발생해도 사용자 답변 출력에는 영향을 주지 않음
+        pass
 
 @st.cache_data(ttl=3600)
 def get_candidate_models(_client, prefer_lite: bool = True):
